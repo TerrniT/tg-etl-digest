@@ -1,0 +1,19 @@
+[project]
+name = "tg-digest-bot"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "aiogram>=3.4.0",
+  "telethon>=1.34.0",
+  "asyncpg>=0.29.0",
+  "python-dotenv>=1.0.1",
+  "openai>=1.40.0",
+  "pydantic>=2.6.0",
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.23.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
