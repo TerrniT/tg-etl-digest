@@ -1,3 +1,21 @@
+# FILE: src/app/config.py
+# VERSION: 1.0.0
+# START_MODULE_CONTRACT
+#   PURPOSE: Load and validate runtime configuration from environment variables.
+#   SCOPE: Build typed Config object with required credentials and operational limits.
+#   DEPENDS: none
+#   LINKS: docs/development-plan.xml#M-CONFIG, docs/knowledge-graph.xml#M-CONFIG
+# END_MODULE_CONTRACT
+#
+# START_MODULE_MAP
+#   Config — Runtime configuration dataclass.
+#   load_config — Read env vars and return Config with defaults for optional limits.
+# END_MODULE_MAP
+#
+# START_CHANGE_SUMMARY
+#   LAST_CHANGE: v1.0.0 - Added GRACE contracts and semantic block markers.
+# END_CHANGE_SUMMARY
+
 import os
 from dataclasses import dataclass
 
@@ -22,15 +40,27 @@ class Config:
     include_post_links: bool
 
 
+# START_CONTRACT: load_config
+#   PURPOSE: Resolve required and optional configuration values from environment.
+#   INPUTS: {}
+#   OUTPUTS: { Config - validated runtime config }
+#   SIDE_EFFECTS: reads process environment and .env file
+#   LINKS: M-CONFIG
+# END_CONTRACT: load_config
 def load_config() -> Config:
+    # START_BLOCK_LOAD_ENV_SOURCES
     load_dotenv()
+    # END_BLOCK_LOAD_ENV_SOURCES
 
+    # START_BLOCK_DEFINE_REQUIRED_VALUE_HELPER
     def must(name: str) -> str:
         value = os.getenv(name)
         if not value:
             raise ValueError(f"Missing env var: {name}")
         return value
+    # END_BLOCK_DEFINE_REQUIRED_VALUE_HELPER
 
+    # START_BLOCK_BUILD_TYPED_CONFIG
     return Config(
         bot_token=must("BOT_TOKEN"),
         database_url=must("DATABASE_URL"),
@@ -47,3 +77,4 @@ def load_config() -> Config:
         tg_message_max_len=int(os.getenv("TG_MESSAGE_MAX_LEN", "3500")),
         include_post_links=os.getenv("INCLUDE_POST_LINKS", "true").lower() == "true",
     )
+    # END_BLOCK_BUILD_TYPED_CONFIG

@@ -1,0 +1,10 @@
+app
+bot
+digest
+domain
+extractor
+parsing
+services
+storage
+summarizer
+transform

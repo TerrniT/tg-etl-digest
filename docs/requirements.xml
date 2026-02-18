@@ -1,0 +1,67 @@
+<RequirementsAnalysis VERSION="1.0.0">
+  <UseCases>
+    <UC-001>
+      <Actor>TelegramUser</Actor>
+      <Action>Adds and manages a personal list of Telegram channel handles via bot commands</Action>
+      <Goal>Maintain a persistent and deduplicated set of channels for digest generation</Goal>
+      <AcceptanceCriteria>
+        <ac-1>Command `/add` accepts `@handle`, `handle`, `t.me/handle`, `https://t.me/handle` formats.</ac-1>
+        <ac-2>Duplicate channels are ignored without creating duplicate records.</ac-2>
+        <ac-3>Command `/list` returns only channels for the requesting Telegram user.</ac-3>
+        <ac-4>Command `/remove` removes only the requesting user-to-channel mapping.</ac-4>
+      </AcceptanceCriteria>
+    </UC-001>
+
+    <UC-002>
+      <Actor>TelegramUser</Actor>
+      <Action>Runs `/analytic` for stored channels</Action>
+      <Goal>Receive channel-by-channel digest based on last text posts</Goal>
+      <AcceptanceCriteria>
+        <ac-1>For each selected channel, the bot fetches recent messages and keeps only text posts.</ac-1>
+        <ac-2>Each channel block starts with `https://t.me/&lt;handle&gt;` and contains summary text.</ac-2>
+        <ac-3>Optional post links are included when `INCLUDE_POST_LINKS=true`.</ac-3>
+        <ac-4>If user has no channels, bot returns an explicit onboarding message.</ac-4>
+      </AcceptanceCriteria>
+    </UC-002>
+
+    <UC-003>
+      <Actor>System</Actor>
+      <Action>Handles extractor and summarizer failures per channel</Action>
+      <Goal>Avoid full-request failure when one channel cannot be processed</Goal>
+      <AcceptanceCriteria>
+        <ac-1>Extractor failure creates a fallback summary in the failed channel block only.</ac-1>
+        <ac-2>Summarizer failure creates a fallback summary and keeps available post links when configured.</ac-2>
+        <ac-3>Remaining channels continue processing and appear in final digest.</ac-3>
+      </AcceptanceCriteria>
+    </UC-003>
+
+    <UC-004>
+      <Actor>System</Actor>
+      <Action>Splits digest output to Telegram-sized chunks</Action>
+      <Goal>Deliver full digest without message truncation</Goal>
+      <AcceptanceCriteria>
+        <ac-1>Chunking preserves channel block boundaries when possible.</ac-1>
+        <ac-2>If a single block exceeds limit, the block is sliced into multiple valid chunks.</ac-2>
+        <ac-3>Every sent chunk length is less than or equal to configured `TG_MESSAGE_MAX_LEN`.</ac-3>
+      </AcceptanceCriteria>
+    </UC-004>
+
+    <UC-005>
+      <Actor>System</Actor>
+      <Action>Normalizes and validates channel handles before persistence</Action>
+      <Goal>Keep storage clean and consistent with Telegram username constraints</Goal>
+      <AcceptanceCriteria>
+        <ac-1>Parser lowercases handles and rejects invite links, path-like tokens, and invalid usernames.</ac-1>
+        <ac-2>Parser enforces per-call token limit and reports truncated tokens.</ac-2>
+        <ac-3>Parser reports invalid tokens separately from valid handles.</ac-3>
+      </AcceptanceCriteria>
+    </UC-005>
+  </UseCases>
+
+  <BusinessRules>
+    <BR-001>Maximum channels per user is controlled by `MAX_CHANNELS_PER_USER` (default: 200).</BR-001>
+    <BR-002>Maximum channels processed per `/analytic` call is controlled by `MAX_CHANNELS_PER_ANALYTIC_CALL` (default: 50).</BR-002>
+    <BR-003>Per-channel post collection limit is controlled by `POSTS_PER_CHANNEL` (default: 5).</BR-003>
+    <BR-004>All bot replies must remain localized to Russian as defined by current prompts and command responses.</BR-004>
+  </BusinessRules>
+</RequirementsAnalysis>

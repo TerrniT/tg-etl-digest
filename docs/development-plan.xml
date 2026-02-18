@@ -1,0 +1,506 @@
+<DevelopmentPlan VERSION="1.0.0">
+  <Modules>
+    <M-CONFIG NAME="ApplicationConfig" TYPE="UTILITY" LAYER="0" ORDER="1">
+      <contract>
+        <purpose>Load and validate runtime configuration from environment variables.</purpose>
+        <inputs>
+          <param-env type="process-environment" />
+        </inputs>
+        <outputs>
+          <param-config type="Config" />
+        </outputs>
+        <errors>
+          <error-missing-env code="VALUE_ERROR_MISSING_ENV" />
+        </errors>
+      </contract>
+      <interface>
+        <type-Config PURPOSE="Typed configuration data container." />
+        <export-load_config PURPOSE="Constructs Config from env values and defaults." />
+      </interface>
+      <depends>none</depends>
+    </M-CONFIG>
+
+    <M-ERRORS NAME="DomainErrors" TYPE="UTILITY" LAYER="0" ORDER="2">
+      <contract>
+        <purpose>Define shared domain-level exception hierarchy used across layers.</purpose>
+        <inputs>
+          <param-message type="str" />
+        </inputs>
+        <outputs>
+          <param-error_types type="DomainError|ValidationError|StorageError|ExtractError|SummarizeError" />
+        </outputs>
+        <errors>
+          <error-none code="NO_INTERNAL_ERRORS" />
+        </errors>
+      </contract>
+      <interface>
+        <class-DomainError PURPOSE="Base class for domain-level failures." />
+        <class-ValidationError PURPOSE="Represents validation failures." />
+        <class-StorageError PURPOSE="Represents storage failures." />
+        <class-ExtractError PURPOSE="Represents Telegram extraction failures." />
+        <class-SummarizeError PURPOSE="Represents LLM summarization failures." />
+      </interface>
+      <depends>none</depends>
+    </M-ERRORS>
+
+    <M-DOMAIN-TYPES NAME="DomainTypes" TYPE="UTILITY" LAYER="0" ORDER="3">
+      <contract>
+        <purpose>Define primitive domain aliases shared by DTOs and services.</purpose>
+        <inputs>
+          <param-raw_values type="str" />
+        </inputs>
+        <outputs>
+          <param-channel_handle type="ChannelHandle" />
+        </outputs>
+        <errors>
+          <error-none code="NO_INTERNAL_ERRORS" />
+        </errors>
+      </contract>
+      <interface>
+        <type-ChannelHandle PURPOSE="Canonical typed alias for Telegram channel handle." />
+      </interface>
+      <depends>none</depends>
+    </M-DOMAIN-TYPES>
+
+    <M-DOMAIN-DTO NAME="DomainDTOs" TYPE="UTILITY" LAYER="0" ORDER="4">
+      <contract>
+        <purpose>Provide immutable data transfer objects for parser, extractor, and digest pipeline.</purpose>
+        <inputs>
+          <param-domain_values type="typed records" />
+        </inputs>
+        <outputs>
+          <param-dto_instances type="ParseChannelsResult|PostDTO|ChannelSummaryDTO|DigestDTO" />
+        </outputs>
+        <errors>
+          <error-none code="NO_INTERNAL_ERRORS" />
+        </errors>
+      </contract>
+      <interface>
+        <type-ParseChannelsResult PURPOSE="Parser result with valid, invalid, and truncated tokens." />
+        <type-PostDTO PURPOSE="Normalized post payload used across ETL and summarization." />
+        <type-ChannelSummaryDTO PURPOSE="Rendered per-channel summary payload." />
+        <type-DigestDTO PURPOSE="Final digest payload for chunking and delivery." />
+      </interface>
+      <depends>M-DOMAIN-TYPES</depends>
+    </M-DOMAIN-DTO>
+
+    <M-TRANSFORM-TEXT NAME="TextNormalization" TYPE="UTILITY" LAYER="0" ORDER="5">
+      <contract>
+        <purpose>Normalize whitespace and truncate text with ellipsis-safe behavior.</purpose>
+        <inputs>
+          <param-text type="str" />
+          <param-max_chars type="int" />
+        </inputs>
+        <outputs>
+          <param-text_out type="str" />
+        </outputs>
+        <errors>
+          <error-none code="NO_INTERNAL_ERRORS" />
+        </errors>
+      </contract>
+      <interface>
+        <export-clean_text PURPOSE="Collapses whitespace and strips text." />
+        <export-truncate_text PURPOSE="Truncates text to max chars with trailing ellipsis." />
+      </interface>
+      <depends>none</depends>
+    </M-TRANSFORM-TEXT>
+
+    <M-PARSING-CHANNELS NAME="ChannelHandleParsing" TYPE="CORE_LOGIC" LAYER="1" ORDER="1">
+      <contract>
+        <purpose>Normalize and validate raw channel tokens into deduplicated ChannelHandle values.</purpose>
+        <inputs>
+          <param-text type="str" />
+          <param-max_items type="int" />
+        </inputs>
+        <outputs>
+          <param-parse_result type="ParseChannelsResult" />
+        </outputs>
+        <errors>
+          <error-none code="NO_EXCEPTION_ON_INVALID_TOKEN" />
+        </errors>
+      </contract>
+      <interface>
+        <export-normalize_handle PURPOSE="Converts one raw token to normalized ChannelHandle or None." />
+        <export-parse_channels PURPOSE="Parses all tokens and separates valid, invalid, and truncated items." />
+      </interface>
+      <depends>M-DOMAIN-TYPES, M-DOMAIN-DTO</depends>
+    </M-PARSING-CHANNELS>
+
+    <M-STORAGE-POOL NAME="PostgresPoolFactory" TYPE="DATA_LAYER" LAYER="1" ORDER="2">
+      <contract>
+        <purpose>Create asyncpg connection pool and map low-level failures to StorageError.</purpose>
+        <inputs>
+          <param-dsn type="str" />
+        </inputs>
+        <outputs>
+          <param-pool type="asyncpg.Pool" />
+        </outputs>
+        <errors>
+          <error-storage code="StorageError" />
+        </errors>
+      </contract>
+      <interface>
+        <export-create_pool PURPOSE="Initializes asyncpg pool with provided DSN." />
+      </interface>
+      <depends>M-ERRORS</depends>
+    </M-STORAGE-POOL>
+
+    <M-TELETHON-CLIENT NAME="TelethonClientFactory" TYPE="INTEGRATION" LAYER="1" ORDER="3">
+      <contract>
+        <purpose>Initialize and start Telethon client session for extractor usage.</purpose>
+        <inputs>
+          <param-session_name type="str" />
+          <param-api_id type="int" />
+          <param-api_hash type="str" />
+        </inputs>
+        <outputs>
+          <param-client type="TelegramClient" />
+        </outputs>
+        <errors>
+          <error-extract code="ExtractError" />
+        </errors>
+      </contract>
+      <interface>
+        <export-create_telethon_client PURPOSE="Creates and starts Telethon client instance." />
+      </interface>
+      <depends>M-ERRORS</depends>
+    </M-TELETHON-CLIENT>
+
+    <M-SUMMARIZER-PROMPTS NAME="SummarizerPromptBuilder" TYPE="CORE_LOGIC" LAYER="1" ORDER="4">
+      <contract>
+        <purpose>Build stable Russian prompt template for channel post summarization.</purpose>
+        <inputs>
+          <param-channel_context type="ChannelHandle|channel_link|list[PostDTO]" />
+        </inputs>
+        <outputs>
+          <param-prompt type="str" />
+        </outputs>
+        <errors>
+          <error-none code="NO_INTERNAL_ERRORS" />
+        </errors>
+      </contract>
+      <interface>
+        <export-build_summary_prompt PURPOSE="Creates deterministic prompt from channel posts." />
+      </interface>
+      <depends>M-DOMAIN-TYPES, M-DOMAIN-DTO</depends>
+    </M-SUMMARIZER-PROMPTS>
+
+    <M-DIGEST-FORMATTER NAME="ChannelBlockFormatter" TYPE="CORE_LOGIC" LAYER="1" ORDER="5">
+      <contract>
+        <purpose>Format one channel summary DTO into display-ready text block.</purpose>
+        <inputs>
+          <param-summary type="ChannelSummaryDTO" />
+          <param-include_post_links type="bool" />
+        </inputs>
+        <outputs>
+          <param-block type="str" />
+        </outputs>
+        <errors>
+          <error-none code="NO_INTERNAL_ERRORS" />
+        </errors>
+      </contract>
+      <interface>
+        <export-format_channel_block PURPOSE="Formats one channel block for digest rendering." />
+      </interface>
+      <depends>M-DOMAIN-DTO</depends>
+    </M-DIGEST-FORMATTER>
+
+    <M-STORAGE-REPO NAME="StorageRepository" TYPE="DATA_LAYER" LAYER="2" ORDER="1">
+      <contract>
+        <purpose>Persist and query users, channels, and posts in PostgreSQL with asyncpg.</purpose>
+        <inputs>
+          <param-pool type="asyncpg.Pool" />
+          <param-domain_values type="tg_user_id|ChannelHandle|PostDTO" />
+        </inputs>
+        <outputs>
+          <param-storage_results type="list|tuple|bool|int" />
+        </outputs>
+        <errors>
+          <error-storage code="StorageError" />
+          <error-validation code="ValidationError" />
+        </errors>
+      </contract>
+      <interface>
+        <export-ensure_user PURPOSE="Ensures user exists and returns internal user id." />
+        <export-list_user_channels PURPOSE="Lists channel handles assigned to a Telegram user." />
+        <export-add_channels_for_user PURPOSE="Adds channel mappings with dedupe and per-user limit handling." />
+        <export-remove_channel_for_user PURPOSE="Removes one channel mapping for a Telegram user." />
+        <export-upsert_posts PURPOSE="Stores posts with idempotent upsert semantics." />
+        <export-get_last_posts PURPOSE="Reads recent posts for a channel from storage." />
+      </interface>
+      <depends>M-ERRORS, M-DOMAIN-TYPES, M-DOMAIN-DTO</depends>
+    </M-STORAGE-REPO>
+
+    <M-SVC-ADD-CHANNELS NAME="AddChannelsUseCase" TYPE="CORE_LOGIC" LAYER="3" ORDER="1">
+      <contract>
+        <purpose>Handle `/add` flow by parsing text and storing validated channel handles for a user.</purpose>
+        <inputs>
+          <param-pool type="asyncpg.Pool" />
+          <param-tg_user_id type="int" />
+          <param-raw_text type="str" />
+          <param-limits type="max_add_per_call|max_per_user" />
+        </inputs>
+        <outputs>
+          <param-response type="AddChannelsResponse" />
+        </outputs>
+        <errors>
+          <error-storage code="StorageError" />
+        </errors>
+      </contract>
+      <interface>
+        <type-AddChannelsResponse PURPOSE="Structured result groups for add command feedback." />
+        <export-add_channels_usecase PURPOSE="Coordinates parser and repository for channel addition." />
+      </interface>
+      <depends>M-PARSING-CHANNELS, M-STORAGE-REPO</depends>
+    </M-SVC-ADD-CHANNELS>
+
+    <M-EXTRACTOR-TELETHON NAME="TelethonPostExtractor" TYPE="INTEGRATION" LAYER="3" ORDER="2">
+      <contract>
+        <purpose>Read last text posts from Telegram channels through Telethon MTProto client.</purpose>
+        <inputs>
+          <param-client type="TelegramClient" />
+          <param-channel_handle type="ChannelHandle" />
+          <param-limit type="int" />
+        </inputs>
+        <outputs>
+          <param-posts type="list[PostDTO]" />
+        </outputs>
+        <errors>
+          <error-extract code="ExtractError" />
+        </errors>
+      </contract>
+      <interface>
+        <export-fetch_last_posts PURPOSE="Collects and normalizes recent text messages for one channel." />
+      </interface>
+      <depends>M-ERRORS, M-DOMAIN-TYPES, M-DOMAIN-DTO, M-TRANSFORM-TEXT</depends>
+    </M-EXTRACTOR-TELETHON>
+
+    <M-SUMMARIZER-LLM NAME="ChannelSummarizer" TYPE="INTEGRATION" LAYER="3" ORDER="3">
+      <contract>
+        <purpose>Generate Russian channel summaries from transformed posts using OpenAI Responses API.</purpose>
+        <inputs>
+          <param-api_key type="str" />
+          <param-model type="str" />
+          <param-channel_context type="ChannelHandle|channel_link|list[PostDTO]" />
+        </inputs>
+        <outputs>
+          <param-summary_text type="str" />
+        </outputs>
+        <errors>
+          <error-validation code="ValidationError" />
+          <error-summarize code="SummarizeError" />
+        </errors>
+      </contract>
+      <interface>
+        <class-Summarizer PURPOSE="OpenAI-backed summarization adapter." />
+        <method-summarize_channel PURPOSE="Builds prompt, calls LLM, and validates summary output." />
+      </interface>
+      <depends>M-ERRORS, M-SUMMARIZER-PROMPTS, M-DOMAIN-TYPES, M-DOMAIN-DTO</depends>
+    </M-SUMMARIZER-LLM>
+
+    <M-TRANSFORM-POSTS NAME="PostTransformation" TYPE="CORE_LOGIC" LAYER="3" ORDER="4">
+      <contract>
+        <purpose>Clean and truncate extracted posts before summarization and response rendering.</purpose>
+        <inputs>
+          <param-posts type="list[PostDTO]" />
+          <param-max_chars_per_post type="int" />
+          <param-min_chars_per_post type="int" />
+        </inputs>
+        <outputs>
+          <param-transformed_posts type="list[PostDTO]" />
+        </outputs>
+        <errors>
+          <error-none code="NO_DOMAIN_EXCEPTION" />
+        </errors>
+      </contract>
+      <interface>
+        <export-transform_posts PURPOSE="Applies clean/truncate pipeline and drops empty records." />
+      </interface>
+      <depends>M-DOMAIN-DTO, M-TRANSFORM-TEXT</depends>
+    </M-TRANSFORM-POSTS>
+
+    <M-DIGEST-ASSEMBLER NAME="DigestAssembly" TYPE="CORE_LOGIC" LAYER="3" ORDER="5">
+      <contract>
+        <purpose>Format channel summaries into digest text blocks and produce a DigestDTO payload.</purpose>
+        <inputs>
+          <param-tg_user_id type="int" />
+          <param-channel_summaries type="list[ChannelSummaryDTO]" />
+          <param-created_at type="datetime" />
+          <param-include_post_links type="bool" />
+        </inputs>
+        <outputs>
+          <param-digest type="DigestDTO" />
+        </outputs>
+        <errors>
+          <error-none code="NO_DOMAIN_EXCEPTION" />
+        </errors>
+      </contract>
+      <interface>
+        <const-DELIMITER PURPOSE="Separator between channel digest blocks." />
+        <export-assemble_digest PURPOSE="Creates the final digest DTO from per-channel blocks." />
+      </interface>
+      <depends>M-DOMAIN-DTO, M-DIGEST-FORMATTER</depends>
+    </M-DIGEST-ASSEMBLER>
+
+    <M-DIGEST-CHUNKING NAME="TelegramChunking" TYPE="CORE_LOGIC" LAYER="4" ORDER="1">
+      <contract>
+        <purpose>Split digest text into Telegram-safe chunks without losing semantic blocks.</purpose>
+        <inputs>
+          <param-text type="str" />
+          <param-max_len type="int" />
+        </inputs>
+        <outputs>
+          <param-chunks type="list[str]" />
+        </outputs>
+        <errors>
+          <error-none code="NO_DOMAIN_EXCEPTION" />
+        </errors>
+      </contract>
+      <interface>
+        <export-chunk_text_for_telegram PURPOSE="Generates ordered chunks that respect telegram message limits." />
+      </interface>
+      <depends>M-DIGEST-ASSEMBLER</depends>
+    </M-DIGEST-CHUNKING>
+
+    <M-SVC-ANALYTIC NAME="AnalyticUseCase" TYPE="CORE_LOGIC" LAYER="5" ORDER="1">
+      <contract>
+        <purpose>Orchestrate extract-transform-summarize pipeline and render digest chunks for `/analytic`.</purpose>
+        <inputs>
+          <param-runtime type="pool|tg_user_id|tg_client|summarizer" />
+          <param-limits type="posts_per_channel|max_channels_per_call|max_chars_per_post|tg_message_max_len" />
+          <param-flags type="include_post_links" />
+        </inputs>
+        <outputs>
+          <param-response type="AnalyticResponse(digest,chunks,warning)" />
+        </outputs>
+        <errors>
+          <error-extract code="ExtractError-handled-per-channel" />
+          <error-summarize code="SummarizeError-handled-per-channel" />
+          <error-storage code="StorageError" />
+        </errors>
+      </contract>
+      <interface>
+        <type-AnalyticResponse PURPOSE="Carries digest DTO, chunk list, and optional warning." />
+        <export-analytic_usecase PURPOSE="Runs complete pipeline for user channels with per-channel isolation." />
+      </interface>
+      <depends>M-STORAGE-REPO, M-EXTRACTOR-TELETHON, M-TRANSFORM-POSTS, M-SUMMARIZER-LLM, M-DIGEST-ASSEMBLER, M-DIGEST-CHUNKING, M-DOMAIN-DTO, M-ERRORS</depends>
+    </M-SVC-ANALYTIC>
+
+    <M-BOT-HANDLERS NAME="TelegramCommandHandlers" TYPE="CORE_LOGIC" LAYER="6" ORDER="1">
+      <contract>
+        <purpose>Implement `/start`, `/add`, `/list`, `/remove`, and `/analytic` bot command handlers.</purpose>
+        <inputs>
+          <param-message type="aiogram.types.Message" />
+          <param-fsm type="FSMContext(optional)" />
+          <param-runtime type="pool|tg_client|summarizer|cfg" />
+        </inputs>
+        <outputs>
+          <param-side_effect type="Telegram answer messages and FSM transitions" />
+        </outputs>
+        <errors>
+          <error-domain code="DomainError" />
+        </errors>
+      </contract>
+      <interface>
+        <export-format_add_response PURPOSE="Renders grouped add command feedback text." />
+        <export-handle_start PURPOSE="Sends onboarding instructions." />
+        <export-handle_add PURPOSE="Processes add command with inline args or FSM transition." />
+        <export-handle_add_waiting_input PURPOSE="Processes follow-up channels message in add FSM state." />
+        <export-handle_list PURPOSE="Returns per-user channel list." />
+        <export-handle_remove PURPOSE="Removes user channel relation." />
+        <export-handle_analytic PURPOSE="Runs analytic use case and sends chunked result." />
+      </interface>
+      <depends>M-CONFIG, M-ERRORS, M-PARSING-CHANNELS, M-SVC-ADD-CHANNELS, M-SVC-ANALYTIC, M-STORAGE-REPO</depends>
+    </M-BOT-HANDLERS>
+
+    <M-BOT-ROUTER NAME="RouterComposition" TYPE="CORE_LOGIC" LAYER="7" ORDER="1">
+      <contract>
+        <purpose>Bind command filters and FSM state handlers to bot handler functions.</purpose>
+        <inputs>
+          <param-runtime type="pool|tg_client|summarizer|cfg" />
+        </inputs>
+        <outputs>
+          <param-router type="aiogram.Router" />
+        </outputs>
+        <errors>
+          <error-none code="NO_DOMAIN_EXCEPTION" />
+        </errors>
+      </contract>
+      <interface>
+        <export-build_router PURPOSE="Constructs aiogram Router with all command handlers." />
+      </interface>
+      <depends>M-BOT-HANDLERS, M-CONFIG, M-SUMMARIZER-LLM</depends>
+    </M-BOT-ROUTER>
+
+    <M-ENTRY-APP NAME="ApplicationEntryPoint" TYPE="ENTRY_POINT" LAYER="8" ORDER="1">
+      <contract>
+        <purpose>Initialize infrastructure clients, compose router, and start bot polling loop.</purpose>
+        <inputs>
+          <param-config type="Config(from env)" />
+        </inputs>
+        <outputs>
+          <param-runtime type="running aiogram dispatcher with bound dependencies" />
+        </outputs>
+        <errors>
+          <error-startup code="propagated startup exceptions" />
+        </errors>
+      </contract>
+      <interface>
+        <export-main PURPOSE="Async bootstrap function for entire application." />
+      </interface>
+      <depends>M-CONFIG, M-BOT-ROUTER, M-SUMMARIZER-LLM, M-TELETHON-CLIENT, M-STORAGE-POOL</depends>
+    </M-ENTRY-APP>
+  </Modules>
+
+  <DataFlow>
+    <DF-ADD-CHANNELS NAME="AddChannelsFlow" TRIGGER="/add">
+      <step-1>Handler receives command and extracts raw token string (inline or FSM input).</step-1>
+      <step-2>`parse_channels` normalizes handles and splits valid/invalid/truncated tokens.</step-2>
+      <step-3>`add_channels_for_user` persists deduplicated mappings under per-user limits.</step-3>
+      <step-4>Handler sends grouped response with added/already/rejected/invalid buckets.</step-4>
+    </DF-ADD-CHANNELS>
+
+    <DF-ANALYTIC NAME="DigestGenerationFlow" TRIGGER="/analytic">
+      <step-1>Use case loads user channels from storage and applies per-call limit guard.</step-1>
+      <step-2>For each channel: extract posts, transform text, and call LLM summarizer.</step-2>
+      <step-3>Per-channel integration errors are converted to fallback summary blocks.</step-3>
+      <step-4>Assembler composes digest text; chunker splits it by Telegram constraints.</step-4>
+      <step-5>Handler sends chunks sequentially to Telegram user.</step-5>
+    </DF-ANALYTIC>
+  </DataFlow>
+
+  <ImplementationOrder>
+    <Phase-1 name="Foundations" status="done">
+      <step-1 module="M-CONFIG">Define env-based runtime configuration with defaults and limits.</step-1>
+      <step-2 module="M-ERRORS">Define shared domain exception hierarchy for all layers.</step-2>
+      <step-3 module="M-DOMAIN-TYPES">Define canonical domain aliases.</step-3>
+      <step-4 module="M-DOMAIN-DTO">Define immutable DTO models for parsing/ETL/digest.</step-4>
+      <step-5 module="M-TRANSFORM-TEXT">Implement common text normalization helpers.</step-5>
+      <step-6 module="M-PARSING-CHANNELS">Implement robust channel token parsing and normalization.</step-6>
+    </Phase-1>
+
+    <Phase-2 name="Integrations" status="done">
+      <step-1 module="M-STORAGE-POOL">Add async PostgreSQL pool initialization.</step-1>
+      <step-2 module="M-STORAGE-REPO">Implement async PostgreSQL persistence and lookup primitives.</step-2>
+      <step-3 module="M-TELETHON-CLIENT">Integrate Telethon client bootstrap.</step-3>
+      <step-4 module="M-EXTRACTOR-TELETHON">Integrate Telegram MTProto extraction for channel posts.</step-4>
+      <step-5 module="M-SUMMARIZER-PROMPTS">Implement deterministic Russian summarization prompts.</step-5>
+      <step-6 module="M-SUMMARIZER-LLM">Integrate OpenAI summarization adapter and prompt pipeline.</step-6>
+      <step-7 module="M-TRANSFORM-POSTS">Add text cleaning/truncation pipeline for extracted posts.</step-7>
+    </Phase-2>
+
+    <Phase-3 name="Digest Pipeline" status="done">
+      <step-1 module="M-DIGEST-FORMATTER">Implement per-channel block formatting rules.</step-1>
+      <step-2 module="M-DIGEST-ASSEMBLER">Implement digest block formatting and DTO composition.</step-2>
+      <step-3 module="M-DIGEST-CHUNKING">Implement Telegram-safe chunk splitting strategy.</step-3>
+      <step-4 module="M-SVC-ADD-CHANNELS">Implement add-channels use case orchestration.</step-4>
+      <step-5 module="M-SVC-ANALYTIC">Implement orchestration with per-channel error isolation.</step-5>
+    </Phase-3>
+
+    <Phase-4 name="Bot Runtime" status="done">
+      <step-1 module="M-BOT-HANDLERS">Implement command handlers for channel management and analytics.</step-1>
+      <step-2 module="M-BOT-ROUTER">Bind handlers and command filters into aiogram Router.</step-2>
+      <step-3 module="M-ENTRY-APP">Compose dependencies and start polling loop.</step-3>
+    </Phase-4>
+  </ImplementationOrder>
+</DevelopmentPlan>

@@ -1,0 +1,291 @@
+<KnowledgeGraph>
+  <Project NAME="TG Digest Bot" VERSION="1.0.0">
+    <keywords>telegram, digest, aiogram, telethon, openai, postgres, etl</keywords>
+    <annotation>Telegram bot that stores per-user channel lists and generates per-channel text digests from recent posts.</annotation>
+
+    <M-CONFIG NAME="ApplicationConfig" TYPE="UTILITY">
+      <purpose>Loads and validates runtime configuration from environment variables.</purpose>
+      <path>src/app/config.py</path>
+      <depends>none</depends>
+      <annotations>
+        <type-Config PURPOSE="Dataclass holding runtime dependencies and limits." />
+        <fn-load_config PURPOSE="Builds Config from env vars and defaults." />
+      </annotations>
+    </M-CONFIG>
+
+    <M-APP-LOGGING NAME="LoggingSetup" TYPE="UTILITY">
+      <purpose>Initializes application logging format and level.</purpose>
+      <path>src/app/logging.py</path>
+      <depends>none</depends>
+      <annotations>
+        <fn-setup_logging PURPOSE="Configures root logger for bot runtime." />
+      </annotations>
+    </M-APP-LOGGING>
+
+    <M-ERRORS NAME="DomainErrors" TYPE="UTILITY">
+      <purpose>Defines shared domain-level exceptions used across modules.</purpose>
+      <path>src/app/errors.py</path>
+      <depends>none</depends>
+      <annotations>
+        <class-DomainError PURPOSE="Base domain exception type." />
+        <class-ValidationError PURPOSE="Input validation failure." />
+        <class-StorageError PURPOSE="Persistence layer failure." />
+        <class-ExtractError PURPOSE="Telegram extraction failure." />
+        <class-SummarizeError PURPOSE="LLM summarization failure." />
+      </annotations>
+    </M-ERRORS>
+
+    <M-DOMAIN-TYPES NAME="DomainTypes" TYPE="UTILITY">
+      <purpose>Holds primitive domain aliases shared by DTOs and services.</purpose>
+      <path>src/domain/types.py</path>
+      <depends>none</depends>
+      <annotations>
+        <type-ChannelHandle PURPOSE="Canonical typed alias for Telegram channel handle." />
+      </annotations>
+    </M-DOMAIN-TYPES>
+
+    <M-DOMAIN-DTO NAME="DomainDTOs" TYPE="UTILITY">
+      <purpose>Holds immutable data transfer objects for parser, ETL, and digest rendering.</purpose>
+      <path>src/domain/dto.py</path>
+      <depends>M-DOMAIN-TYPES</depends>
+      <annotations>
+        <type-ParseChannelsResult PURPOSE="Parser output with valid, invalid, and truncated tokens." />
+        <type-PostDTO PURPOSE="Normalized text post payload." />
+        <type-ChannelSummaryDTO PURPOSE="Per-channel digest summary payload." />
+        <type-DigestDTO PURPOSE="Complete digest payload for chunked delivery." />
+      </annotations>
+      <CrossLink from="M-DOMAIN-DTO" to="M-DOMAIN-TYPES" relation="uses-channel-handle-type" />
+    </M-DOMAIN-DTO>
+
+    <M-TRANSFORM-TEXT NAME="TextNormalization" TYPE="UTILITY">
+      <purpose>Normalizes whitespace and truncates long text safely.</purpose>
+      <path>src/transform/text.py</path>
+      <depends>none</depends>
+      <annotations>
+        <fn-clean_text PURPOSE="Collapses whitespace and trims text." />
+        <fn-truncate_text PURPOSE="Truncates text with ellipsis marker." />
+      </annotations>
+    </M-TRANSFORM-TEXT>
+
+    <M-PARSING-CHANNELS NAME="ChannelHandleParsing" TYPE="CORE_LOGIC">
+      <purpose>Parses raw command input into validated and deduplicated channel handles.</purpose>
+      <path>src/parsing/channels.py</path>
+      <depends>M-DOMAIN-TYPES, M-DOMAIN-DTO</depends>
+      <annotations>
+        <fn-normalize_handle PURPOSE="Normalizes one token into ChannelHandle or None." />
+        <fn-parse_channels PURPOSE="Parses all raw tokens and tracks invalid/truncated values." />
+      </annotations>
+      <CrossLink from="M-PARSING-CHANNELS" to="M-DOMAIN-TYPES" relation="builds-channel-handle-values" />
+      <CrossLink from="M-PARSING-CHANNELS" to="M-DOMAIN-DTO" relation="returns-parse-result-dto" />
+    </M-PARSING-CHANNELS>
+
+    <M-STORAGE-POOL NAME="PostgresPoolFactory" TYPE="DATA_LAYER">
+      <purpose>Creates asyncpg pool and maps failures into domain storage errors.</purpose>
+      <path>src/storage/postgres.py</path>
+      <depends>M-ERRORS</depends>
+      <annotations>
+        <fn-create_pool PURPOSE="Initializes asyncpg pool using configured DSN." />
+      </annotations>
+      <CrossLink from="M-STORAGE-POOL" to="M-ERRORS" relation="maps-exceptions-to-storage-error" />
+    </M-STORAGE-POOL>
+
+    <M-STORAGE-REPO NAME="StorageRepository" TYPE="DATA_LAYER">
+      <purpose>Manages users/channels/posts persistence and retrieval operations.</purpose>
+      <path>src/storage/repository.py</path>
+      <depends>M-ERRORS, M-DOMAIN-TYPES, M-DOMAIN-DTO</depends>
+      <annotations>
+        <fn-ensure_user PURPOSE="Ensures user row exists for Telegram user id." />
+        <fn-list_user_channels PURPOSE="Reads sorted channel list for a user." />
+        <fn-add_channels_for_user PURPOSE="Adds deduplicated channels under limit constraints." />
+        <fn-remove_channel_for_user PURPOSE="Removes one user-channel relation." />
+        <fn-upsert_posts PURPOSE="Stores posts idempotently by channel and tg message id." />
+        <fn-get_last_posts PURPOSE="Fetches recent stored posts for one channel." />
+      </annotations>
+      <CrossLink from="M-STORAGE-REPO" to="M-ERRORS" relation="raises-domain-storage-errors" />
+      <CrossLink from="M-STORAGE-REPO" to="M-DOMAIN-TYPES" relation="reads-and-returns-channel-handle-values" />
+      <CrossLink from="M-STORAGE-REPO" to="M-DOMAIN-DTO" relation="reads-and-writes-post-dto" />
+    </M-STORAGE-REPO>
+
+    <M-TELETHON-CLIENT NAME="TelethonClientFactory" TYPE="INTEGRATION">
+      <purpose>Creates and starts Telethon client session for extractor operations.</purpose>
+      <path>src/extractor/telethon_client.py</path>
+      <depends>M-ERRORS</depends>
+      <annotations>
+        <fn-create_telethon_client PURPOSE="Builds and starts Telethon client with API credentials." />
+      </annotations>
+      <CrossLink from="M-TELETHON-CLIENT" to="M-ERRORS" relation="maps-client-errors-to-extract-error" />
+    </M-TELETHON-CLIENT>
+
+    <M-EXTRACTOR-TELETHON NAME="TelethonPostExtractor" TYPE="INTEGRATION">
+      <purpose>Fetches recent text posts from Telegram channel entities via MTProto.</purpose>
+      <path>src/extractor/telethon_extractor.py</path>
+      <depends>M-ERRORS, M-DOMAIN-TYPES, M-DOMAIN-DTO, M-TRANSFORM-TEXT</depends>
+      <annotations>
+        <fn-fetch_last_posts PURPOSE="Returns recent text posts for one channel as PostDTO list." />
+      </annotations>
+      <CrossLink from="M-EXTRACTOR-TELETHON" to="M-ERRORS" relation="maps-telethon-failures-to-extract-error" />
+      <CrossLink from="M-EXTRACTOR-TELETHON" to="M-DOMAIN-TYPES" relation="consumes-channel-handle-input" />
+      <CrossLink from="M-EXTRACTOR-TELETHON" to="M-DOMAIN-DTO" relation="returns-post-dto-values" />
+      <CrossLink from="M-EXTRACTOR-TELETHON" to="M-TRANSFORM-TEXT" relation="cleans-message-text-before-dto" />
+    </M-EXTRACTOR-TELETHON>
+
+    <M-SUMMARIZER-PROMPTS NAME="SummarizerPromptBuilder" TYPE="CORE_LOGIC">
+      <purpose>Builds channel-aware Russian prompt from normalized posts for LLM summarization.</purpose>
+      <path>src/summarizer/prompts.py</path>
+      <depends>M-DOMAIN-TYPES, M-DOMAIN-DTO</depends>
+      <annotations>
+        <fn-build_summary_prompt PURPOSE="Constructs deterministic prompt payload for LLM." />
+      </annotations>
+      <CrossLink from="M-SUMMARIZER-PROMPTS" to="M-DOMAIN-TYPES" relation="uses-channel-handle" />
+      <CrossLink from="M-SUMMARIZER-PROMPTS" to="M-DOMAIN-DTO" relation="formats-post-dto-content" />
+    </M-SUMMARIZER-PROMPTS>
+
+    <M-SUMMARIZER-LLM NAME="ChannelSummarizer" TYPE="INTEGRATION">
+      <purpose>Calls OpenAI Responses API and validates summary output.</purpose>
+      <path>src/summarizer/llm.py</path>
+      <depends>M-ERRORS, M-SUMMARIZER-PROMPTS, M-DOMAIN-TYPES, M-DOMAIN-DTO</depends>
+      <annotations>
+        <class-Summarizer PURPOSE="OpenAI-backed summarization adapter." />
+        <method-summarize_channel PURPOSE="Summarizes transformed channel posts into Russian digest text." />
+      </annotations>
+      <CrossLink from="M-SUMMARIZER-LLM" to="M-ERRORS" relation="maps-llm-failures-to-summarize-error" />
+      <CrossLink from="M-SUMMARIZER-LLM" to="M-SUMMARIZER-PROMPTS" relation="builds-prompt-before-request" />
+      <CrossLink from="M-SUMMARIZER-LLM" to="M-DOMAIN-TYPES" relation="uses-channel-handle-context" />
+      <CrossLink from="M-SUMMARIZER-LLM" to="M-DOMAIN-DTO" relation="consumes-post-dto-input" />
+    </M-SUMMARIZER-LLM>
+
+    <M-TRANSFORM-POSTS NAME="PostTransformation" TYPE="CORE_LOGIC">
+      <purpose>Cleans and truncates extracted posts before summarization and linking.</purpose>
+      <path>src/transform/posts.py</path>
+      <depends>M-DOMAIN-DTO, M-TRANSFORM-TEXT</depends>
+      <annotations>
+        <fn-transform_posts PURPOSE="Applies clean/truncate pipeline and filters empty text posts." />
+      </annotations>
+      <CrossLink from="M-TRANSFORM-POSTS" to="M-DOMAIN-DTO" relation="rewrites-post-dto-values" />
+      <CrossLink from="M-TRANSFORM-POSTS" to="M-TRANSFORM-TEXT" relation="calls-clean-and-truncate-functions" />
+    </M-TRANSFORM-POSTS>
+
+    <M-DIGEST-FORMATTER NAME="ChannelBlockFormatter" TYPE="CORE_LOGIC">
+      <purpose>Converts one channel summary DTO into final render block.</purpose>
+      <path>src/digest/formatter.py</path>
+      <depends>M-DOMAIN-DTO</depends>
+      <annotations>
+        <fn-format_channel_block PURPOSE="Formats link, summary text, and optional post links." />
+      </annotations>
+      <CrossLink from="M-DIGEST-FORMATTER" to="M-DOMAIN-DTO" relation="consumes-channel-summary-dto" />
+    </M-DIGEST-FORMATTER>
+
+    <M-DIGEST-ASSEMBLER NAME="DigestAssembly" TYPE="CORE_LOGIC">
+      <purpose>Assembles channel blocks into one digest payload with block delimiter.</purpose>
+      <path>src/digest/assembler.py</path>
+      <depends>M-DOMAIN-DTO, M-DIGEST-FORMATTER</depends>
+      <annotations>
+        <const-DELIMITER PURPOSE="Separator between channel blocks inside digest raw text." />
+        <fn-assemble_digest PURPOSE="Creates DigestDTO with rendered raw text." />
+      </annotations>
+      <CrossLink from="M-DIGEST-ASSEMBLER" to="M-DOMAIN-DTO" relation="produces-digest-dto" />
+      <CrossLink from="M-DIGEST-ASSEMBLER" to="M-DIGEST-FORMATTER" relation="formats-each-channel-block" />
+    </M-DIGEST-ASSEMBLER>
+
+    <M-DIGEST-CHUNKING NAME="TelegramChunking" TYPE="CORE_LOGIC">
+      <purpose>Splits digest text into Telegram-safe chunks preserving block boundaries when possible.</purpose>
+      <path>src/digest/chunking.py</path>
+      <depends>M-DIGEST-ASSEMBLER</depends>
+      <annotations>
+        <fn-chunk_text_for_telegram PURPOSE="Splits digest by delimiter and hard-cuts oversized blocks." />
+      </annotations>
+      <CrossLink from="M-DIGEST-CHUNKING" to="M-DIGEST-ASSEMBLER" relation="uses-delimiter-for-safe-split" />
+    </M-DIGEST-CHUNKING>
+
+    <M-SVC-ADD-CHANNELS NAME="AddChannelsUseCase" TYPE="CORE_LOGIC">
+      <purpose>Coordinates parser and repository for `/add` command execution.</purpose>
+      <path>src/services/add_channels.py</path>
+      <depends>M-PARSING-CHANNELS, M-STORAGE-REPO, M-DOMAIN-TYPES</depends>
+      <annotations>
+        <type-AddChannelsResponse PURPOSE="Response model for grouped add-channel outcome." />
+        <fn-add_channels_usecase PURPOSE="Runs parse, persist, and grouped result mapping." />
+      </annotations>
+      <CrossLink from="M-SVC-ADD-CHANNELS" to="M-PARSING-CHANNELS" relation="validates-and-normalizes-input-handles" />
+      <CrossLink from="M-SVC-ADD-CHANNELS" to="M-STORAGE-REPO" relation="persists-channel-relations" />
+      <CrossLink from="M-SVC-ADD-CHANNELS" to="M-DOMAIN-TYPES" relation="returns-channel-handle-values" />
+    </M-SVC-ADD-CHANNELS>
+
+    <M-SVC-ANALYTIC NAME="AnalyticUseCase" TYPE="CORE_LOGIC">
+      <purpose>Runs extract-transform-summarize pipeline and produces chunked digest response.</purpose>
+      <path>src/services/analytic.py</path>
+      <depends>M-ERRORS, M-STORAGE-REPO, M-EXTRACTOR-TELETHON, M-TRANSFORM-POSTS, M-SUMMARIZER-LLM, M-DIGEST-ASSEMBLER, M-DIGEST-CHUNKING, M-DOMAIN-DTO</depends>
+      <annotations>
+        <type-AnalyticResponse PURPOSE="Digest payload with chunk list and optional warning." />
+        <fn-analytic_usecase PURPOSE="Performs per-user analytic pipeline with per-channel fallback handling." />
+      </annotations>
+      <CrossLink from="M-SVC-ANALYTIC" to="M-ERRORS" relation="handles-extract-and-summarize-domain-errors" />
+      <CrossLink from="M-SVC-ANALYTIC" to="M-STORAGE-REPO" relation="loads-user-channels" />
+      <CrossLink from="M-SVC-ANALYTIC" to="M-EXTRACTOR-TELETHON" relation="extracts-channel-posts" />
+      <CrossLink from="M-SVC-ANALYTIC" to="M-TRANSFORM-POSTS" relation="normalizes-and-truncates-posts" />
+      <CrossLink from="M-SVC-ANALYTIC" to="M-SUMMARIZER-LLM" relation="summarizes-channel-posts" />
+      <CrossLink from="M-SVC-ANALYTIC" to="M-DIGEST-ASSEMBLER" relation="assembles-digest-content" />
+      <CrossLink from="M-SVC-ANALYTIC" to="M-DIGEST-CHUNKING" relation="splits-digest-for-telegram-limit" />
+      <CrossLink from="M-SVC-ANALYTIC" to="M-DOMAIN-DTO" relation="produces-channel-summary-and-digest-dto" />
+    </M-SVC-ANALYTIC>
+
+    <M-BOT-STATES NAME="BotFSMStates" TYPE="CORE_LOGIC">
+      <purpose>Defines FSM state machine for multi-step bot interactions.</purpose>
+      <path>src/bot/states.py</path>
+      <depends>none</depends>
+      <annotations>
+        <class-AddChannelsFSM PURPOSE="State group for waiting add-channel user input." />
+      </annotations>
+    </M-BOT-STATES>
+
+    <M-BOT-HANDLERS NAME="TelegramCommandHandlers" TYPE="CORE_LOGIC">
+      <purpose>Implements bot command handlers for channel management and digest generation.</purpose>
+      <path>src/bot/handlers.py</path>
+      <depends>M-CONFIG, M-ERRORS, M-PARSING-CHANNELS, M-SVC-ADD-CHANNELS, M-SVC-ANALYTIC, M-STORAGE-REPO, M-SUMMARIZER-LLM, M-BOT-STATES</depends>
+      <annotations>
+        <fn-format_add_response PURPOSE="Formats grouped response for `/add` result." />
+        <fn-handle_start PURPOSE="Sends greeting and usage instructions." />
+        <fn-handle_add PURPOSE="Handles `/add` command and optional FSM transition." />
+        <fn-handle_add_waiting_input PURPOSE="Handles follow-up input in add state." />
+        <fn-handle_list PURPOSE="Lists user channels." />
+        <fn-handle_remove PURPOSE="Removes one user channel." />
+        <fn-handle_analytic PURPOSE="Runs analytic use case and sends chunks." />
+      </annotations>
+      <CrossLink from="M-BOT-HANDLERS" to="M-CONFIG" relation="reads-runtime-command-limits-and-flags" />
+      <CrossLink from="M-BOT-HANDLERS" to="M-ERRORS" relation="maps-domain-failures-to-user-friendly-messages" />
+      <CrossLink from="M-BOT-HANDLERS" to="M-PARSING-CHANNELS" relation="parses-remove-and-fsm-input" />
+      <CrossLink from="M-BOT-HANDLERS" to="M-SVC-ADD-CHANNELS" relation="executes-add-command-usecase" />
+      <CrossLink from="M-BOT-HANDLERS" to="M-SVC-ANALYTIC" relation="executes-analytic-command-usecase" />
+      <CrossLink from="M-BOT-HANDLERS" to="M-STORAGE-REPO" relation="lists-and-removes-user-channels" />
+      <CrossLink from="M-BOT-HANDLERS" to="M-SUMMARIZER-LLM" relation="uses-summarizer-runtime-type-injection" />
+      <CrossLink from="M-BOT-HANDLERS" to="M-BOT-STATES" relation="controls-add-command-fsm-state" />
+    </M-BOT-HANDLERS>
+
+    <M-BOT-ROUTER NAME="RouterComposition" TYPE="CORE_LOGIC">
+      <purpose>Builds aiogram router and binds filters/states to handler functions.</purpose>
+      <path>src/bot/router.py</path>
+      <depends>M-BOT-HANDLERS, M-BOT-STATES, M-CONFIG, M-SUMMARIZER-LLM</depends>
+      <annotations>
+        <fn-build_router PURPOSE="Creates Router with all command and state handlers." />
+      </annotations>
+      <CrossLink from="M-BOT-ROUTER" to="M-BOT-HANDLERS" relation="delegates-command-processing" />
+      <CrossLink from="M-BOT-ROUTER" to="M-BOT-STATES" relation="binds-state-handler-for-add-flow" />
+      <CrossLink from="M-BOT-ROUTER" to="M-CONFIG" relation="passes-config-dependencies-to-handlers" />
+      <CrossLink from="M-BOT-ROUTER" to="M-SUMMARIZER-LLM" relation="passes-summarizer-instance" />
+    </M-BOT-ROUTER>
+
+    <M-ENTRY-APP NAME="ApplicationEntryPoint" TYPE="ENTRY_POINT">
+      <purpose>Composes infrastructure dependencies and starts bot polling loop.</purpose>
+      <path>src/app/main.py</path>
+      <depends>M-APP-LOGGING, M-CONFIG, M-STORAGE-POOL, M-TELETHON-CLIENT, M-SUMMARIZER-LLM, M-BOT-ROUTER</depends>
+      <annotations>
+        <fn-main PURPOSE="Bootstraps config, clients, router, and starts aiogram polling." />
+      </annotations>
+      <CrossLink from="M-ENTRY-APP" to="M-APP-LOGGING" relation="initializes-runtime-logging" />
+      <CrossLink from="M-ENTRY-APP" to="M-CONFIG" relation="loads-application-config" />
+      <CrossLink from="M-ENTRY-APP" to="M-STORAGE-POOL" relation="creates-postgres-pool" />
+      <CrossLink from="M-ENTRY-APP" to="M-TELETHON-CLIENT" relation="creates-mtproto-client" />
+      <CrossLink from="M-ENTRY-APP" to="M-SUMMARIZER-LLM" relation="creates-summarizer-instance" />
+      <CrossLink from="M-ENTRY-APP" to="M-BOT-ROUTER" relation="registers-router-and-starts-polling" />
+    </M-ENTRY-APP>
+  </Project>
+</KnowledgeGraph>
