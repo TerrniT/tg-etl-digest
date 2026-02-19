@@ -29,14 +29,14 @@ from .prompts import build_summary_prompt
 class Summarizer:
     # START_CONTRACT: Summarizer.__init__
     #   PURPOSE: Initialize OpenAI client wrapper with configured API key and model.
-    #   INPUTS: { api_key: str, model: str }
+    #   INPUTS: { api_key: str, model: str, base_url: str }
     #   OUTPUTS: { None }
     #   SIDE_EFFECTS: creates OpenAI client instance
     #   LINKS: M-SUMMARIZER-LLM
     # END_CONTRACT: Summarizer.__init__
-    def __init__(self, api_key: str, model: str) -> None:
+    def __init__(self, api_key: str, model: str, base_url: str) -> None:
         # START_BLOCK_INIT_OPENAI_CLIENT
-        self._client = OpenAI(api_key=api_key)
+        self._client = OpenAI(api_key=api_key, base_url=base_url)
         self._model = model
         # END_BLOCK_INIT_OPENAI_CLIENT
 

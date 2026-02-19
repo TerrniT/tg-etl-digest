@@ -43,7 +43,7 @@ async def main() -> None:
     # START_BLOCK_INIT_INFRA_CLIENTS
     pool = await create_pool(cfg.database_url)
     tg_client = await create_telethon_client(cfg.telethon_session_name, cfg.tg_api_id, cfg.tg_api_hash)
-    summarizer = Summarizer(api_key=cfg.openai_api_key, model=cfg.openai_model)
+    summarizer = Summarizer(api_key=cfg.openai_api_key, model=cfg.openai_model, base_url=cfg.openai_base_url)
     # END_BLOCK_INIT_INFRA_CLIENTS
 
     # START_BLOCK_COMPOSE_ROUTER_AND_START_POLLING
