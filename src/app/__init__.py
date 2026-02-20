@@ -4,7 +4,7 @@
 #   PURPOSE: Declare app package boundary for bootstrap, config, logging, and error modules.
 #   SCOPE: Namespace marker for app submodules; contains no runtime logic.
 #   DEPENDS: none
-#   LINKS: docs/knowledge-graph.xml#M-ENTRY-APP, docs/knowledge-graph.xml#M-CONFIG, docs/knowledge-graph.xml#M-APP-LOGGING, docs/knowledge-graph.xml#M-ERRORS
+#   LINKS: docs/knowledge-graph.xml#M-ENTRY-APP, docs/knowledge-graph.xml#M-CONFIG, docs/knowledge-graph.xml#M-APP-LOGGING, docs/knowledge-graph.xml#M-ERROR-LOGGING, docs/knowledge-graph.xml#M-ERRORS
 # END_MODULE_CONTRACT
 #
 # START_MODULE_MAP

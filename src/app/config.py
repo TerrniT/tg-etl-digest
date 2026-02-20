@@ -1,5 +1,5 @@
 # FILE: src/app/config.py
-# VERSION: 1.0.0
+# VERSION: 1.0.1
 # START_MODULE_CONTRACT
 #   PURPOSE: Load and validate runtime configuration from environment variables.
 #   SCOPE: Build typed Config object with required credentials and operational limits.
@@ -13,7 +13,7 @@
 # END_MODULE_MAP
 #
 # START_CHANGE_SUMMARY
-#   LAST_CHANGE: v1.0.0 - Added GRACE contracts and semantic block markers.
+#   LAST_CHANGE: v1.0.1 - Added missing `openai_base_url` Config field to match runtime loader usage.
 # END_CHANGE_SUMMARY
 
 import os
@@ -30,6 +30,7 @@ class Config:
     tg_api_hash: str
     telethon_session_name: str
     openai_api_key: str
+    openai_base_url: str
     openai_model: str
     max_add_per_call: int
     max_channels_per_user: int

@@ -18,8 +18,10 @@
 # END_MODULE_MAP
 #
 # START_CHANGE_SUMMARY
-#   LAST_CHANGE: v1.0.0 - Added GRACE contracts and semantic block markers.
+#   LAST_CHANGE: v1.1.0 - Added error-level logging for handled domain failures.
 # END_CHANGE_SUMMARY
+
+import logging
 
 from aiogram import types
 from aiogram.fsm.context import FSMContext
@@ -33,6 +35,8 @@ from src.storage.repository import list_user_channels, remove_channel_for_user
 from src.summarizer.llm import Summarizer
 
 from .states import AddChannelsFSM
+
+logger = logging.getLogger(__name__)
 
 
 # START_CONTRACT: format_add_response
@@ -129,6 +133,7 @@ async def handle_add(message: types.Message, state: FSMContext, pool, cfg: Confi
         await message.answer(format_add_response(resp))
         # END_BLOCK_EXECUTE_ADD_USECASE_AND_REPLY
     except DomainError:
+        logger.exception("[BotHandlers][handle_add][DOMAIN_ERROR] failed to process /add command")
         await message.answer("Не удалось добавить каналы. Попробуйте позже.")
 
 
@@ -165,6 +170,9 @@ async def handle_add_waiting_input(message: types.Message, state: FSMContext, po
             await state.clear()
         # END_BLOCK_CLEAR_FSM_STATE_ON_VALID_PARSED_HANDLES
     except DomainError:
+        logger.exception(
+            "[BotHandlers][handle_add_waiting_input][DOMAIN_ERROR] failed to process FSM payload"
+        )
         await message.answer("Не удалось добавить каналы. Попробуйте позже.")
 
 
@@ -189,6 +197,7 @@ async def handle_list(message: types.Message, pool) -> None:
         await message.answer("\n".join(lines))
         # END_BLOCK_RENDER_CHANNEL_LIST_MESSAGE
     except DomainError:
+        logger.exception("[BotHandlers][handle_list][DOMAIN_ERROR] failed to list user channels")
         await message.answer("Не удалось получить список каналов.")
 
 
@@ -226,6 +235,7 @@ async def handle_remove(message: types.Message, pool) -> None:
             await message.answer(f"Канал не найден в вашем списке: https://t.me/{str(handle)}")
         # END_BLOCK_EXECUTE_REMOVE_AND_REPLY
     except DomainError:
+        logger.exception("[BotHandlers][handle_remove][DOMAIN_ERROR] failed to remove channel")
         await message.answer("Не удалось удалить канал.")
 
 
@@ -258,4 +268,5 @@ async def handle_analytic(message: types.Message, pool, tg_client, summarizer: S
             await message.answer(chunk)
         # END_BLOCK_SEND_DIGEST_CHUNKS
     except DomainError:
+        logger.exception("[BotHandlers][handle_analytic][DOMAIN_ERROR] failed to build analytic digest")
         await message.answer("Не удалось собрать дайджест. Попробуйте позже.")

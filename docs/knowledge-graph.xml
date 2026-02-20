@@ -1,5 +1,5 @@
 <KnowledgeGraph>
-  <Project NAME="TG Digest Bot" VERSION="1.0.0">
+  <Project NAME="TG Digest Bot" VERSION="1.1.0">
     <keywords>telegram, digest, aiogram, telethon, openai, postgres, etl</keywords>
     <annotation>Telegram bot that stores per-user channel lists and generates per-channel text digests from recent posts.</annotation>
 
@@ -21,6 +21,20 @@
         <fn-setup_logging PURPOSE="Configures root logger for bot runtime." />
       </annotations>
     </M-APP-LOGGING>
+
+    <M-ERROR-LOGGING NAME="ErrorLoggingModule" TYPE="UTILITY">
+      <purpose>Captures handled and unhandled errors into timestamped files under logs/timestamps.</purpose>
+      <path>src/app/error_logging.py</path>
+      <depends>M-APP-LOGGING</depends>
+      <annotations>
+        <const-DEFAULT_ERROR_LOG_DIR PURPOSE="Default filesystem location for timestamped error logs." />
+        <fn-build_error_log_path PURPOSE="Builds timestamped error log file path." />
+        <fn-setup_error_file_logging PURPOSE="Attaches ERROR-level file handler and returns log path." />
+        <fn-install_global_exception_hooks PURPOSE="Registers unhandled sync/thread exception hooks." />
+        <fn-install_asyncio_exception_handler PURPOSE="Registers unhandled asyncio exception hook." />
+      </annotations>
+      <CrossLink from="M-ERROR-LOGGING" to="M-APP-LOGGING" relation="extends-runtime-logging-with-error-file-handler" />
+    </M-ERROR-LOGGING>
 
     <M-ERRORS NAME="DomainErrors" TYPE="UTILITY">
       <purpose>Defines shared domain-level exceptions used across modules.</purpose>
@@ -276,11 +290,12 @@
     <M-ENTRY-APP NAME="ApplicationEntryPoint" TYPE="ENTRY_POINT">
       <purpose>Composes infrastructure dependencies and starts bot polling loop.</purpose>
       <path>src/app/main.py</path>
-      <depends>M-APP-LOGGING, M-CONFIG, M-STORAGE-POOL, M-TELETHON-CLIENT, M-SUMMARIZER-LLM, M-BOT-ROUTER</depends>
+      <depends>M-APP-LOGGING, M-ERROR-LOGGING, M-CONFIG, M-STORAGE-POOL, M-TELETHON-CLIENT, M-SUMMARIZER-LLM, M-BOT-ROUTER</depends>
       <annotations>
         <fn-main PURPOSE="Bootstraps config, clients, router, and starts aiogram polling." />
       </annotations>
       <CrossLink from="M-ENTRY-APP" to="M-APP-LOGGING" relation="initializes-runtime-logging" />
+      <CrossLink from="M-ENTRY-APP" to="M-ERROR-LOGGING" relation="installs-global-exception-hooks-and-file-logging" />
       <CrossLink from="M-ENTRY-APP" to="M-CONFIG" relation="loads-application-config" />
       <CrossLink from="M-ENTRY-APP" to="M-STORAGE-POOL" relation="creates-postgres-pool" />
       <CrossLink from="M-ENTRY-APP" to="M-TELETHON-CLIENT" relation="creates-mtproto-client" />

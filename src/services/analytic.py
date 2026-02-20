@@ -13,9 +13,10 @@
 # END_MODULE_MAP
 #
 # START_CHANGE_SUMMARY
-#   LAST_CHANGE: v1.0.0 - Added GRACE contracts and semantic block markers.
+#   LAST_CHANGE: v1.1.0 - Added per-channel error logging for extract/summarize failures.
 # END_CHANGE_SUMMARY
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -29,6 +30,8 @@ from src.extractor.telethon_extractor import fetch_last_posts
 from src.storage.repository import list_user_channels
 from src.summarizer.llm import Summarizer
 from src.transform.posts import transform_posts
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -110,6 +113,10 @@ async def analytic_usecase(
             )
 
         except ExtractError as e:
+            logger.exception(
+                "[AnalyticService][analytic_usecase][CHANNEL_EXTRACT_ERROR] handle=%s",
+                str(handle),
+            )
             summaries.append(
                 ChannelSummaryDTO(
                     channel_handle=handle,
@@ -119,6 +126,10 @@ async def analytic_usecase(
                 )
             )
         except SummarizeError as e:
+            logger.exception(
+                "[AnalyticService][analytic_usecase][CHANNEL_SUMMARIZE_ERROR] handle=%s",
+                str(handle),
+            )
             fallback_links = [p.permalink for p in posts if p.permalink]
             summaries.append(
                 ChannelSummaryDTO(

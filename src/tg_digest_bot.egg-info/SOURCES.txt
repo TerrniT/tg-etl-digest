@@ -2,6 +2,7 @@ README.md
 pyproject.toml
 src/app/__init__.py
 src/app/config.py
+src/app/error_logging.py
 src/app/errors.py
 src/app/logging.py
 src/app/main.py
@@ -39,4 +40,5 @@ src/transform/__init__.py
 src/transform/posts.py
 src/transform/text.py
 tests/test_chunking.py
+tests/test_error_logging.py
 tests/test_parse_channels.py

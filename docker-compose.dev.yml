@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tg_digest}
+      POSTGRES_USER: ${POSTGRES_USER:-tg_digest}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tg_digest}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tg_digest} -d ${POSTGRES_DB:-tg_digest}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tg_digest}:${POSTGRES_PASSWORD:-tg_digest}@postgres:5432/${POSTGRES_DB:-tg_digest}
+      TELETHON_SESSION_NAME: ${TELETHON_SESSION_NAME:-/app/sessions/user_session}
+      AI_MODEL: ${AI_MODEL:-qwen-coder}
+      BOT_TOKEN: ${BOT_TOKEN:-changeme}
+      TG_API_ID: ${TG_API_ID:-123456}
+      TG_API_HASH: ${TG_API_HASH:-changeme}
+      AI_API_KEY: ${AI_API_KEY:-changeme}
+      AI_BASE_URL: ${AI_BASE_URL:-https://api.openai.com/v1}
+    volumes:
+      - ./logs:/app/logs
+      - ./sessions:/app/sessions
+    command: python -m src.app.main
+
+volumes:
+  pgdata:

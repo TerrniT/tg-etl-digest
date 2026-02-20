@@ -1,4 +1,4 @@
-<TechnologyStack VERSION="1.0.0">
+<TechnologyStack VERSION="1.1.0">
   <Runtime>Python</Runtime>
   <RuntimeVersion>3.11+</RuntimeVersion>
   <Language>Python</Language>
@@ -28,5 +28,6 @@
     <tool-pyproject kind="build-metadata" value="PEP 621 project metadata in pyproject.toml" />
     <tool-pytest kind="test-runner" version="8.x" />
     <tool-migrations kind="database-migration" value="SQL migration files in migrations/" />
+    <tool-error-logs kind="runtime-observability" value="logs/timestamps/YYYYMMDD-HHMMSS.log" />
   </Tooling>
 </TechnologyStack>

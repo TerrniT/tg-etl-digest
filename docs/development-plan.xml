@@ -1,4 +1,4 @@
-<DevelopmentPlan VERSION="1.0.0">
+<DevelopmentPlan VERSION="1.1.0">
   <Modules>
     <M-CONFIG NAME="ApplicationConfig" TYPE="UTILITY" LAYER="0" ORDER="1">
       <contract>
@@ -104,6 +104,47 @@
       </interface>
       <depends>none</depends>
     </M-TRANSFORM-TEXT>
+
+    <M-APP-LOGGING NAME="LoggingSetup" TYPE="UTILITY" LAYER="0" ORDER="6">
+      <contract>
+        <purpose>Configure baseline runtime logging format and level for application diagnostics.</purpose>
+        <inputs>
+          <param-none type="none" />
+        </inputs>
+        <outputs>
+          <param-none type="none" />
+        </outputs>
+        <errors>
+          <error-none code="NO_INTERNAL_ERRORS" />
+        </errors>
+      </contract>
+      <interface>
+        <export-setup_logging PURPOSE="Initializes root logger defaults for runtime services." />
+      </interface>
+      <depends>none</depends>
+    </M-APP-LOGGING>
+
+    <M-ERROR-LOGGING NAME="ErrorLoggingModule" TYPE="UTILITY" LAYER="1" ORDER="6">
+      <contract>
+        <purpose>Persist handled and unhandled runtime errors into timestamped files under logs/timestamps.</purpose>
+        <inputs>
+          <param-runtime type="base_dir|logger|event_loop" />
+        </inputs>
+        <outputs>
+          <param-path type="Path-to-created-error-log-file" />
+        </outputs>
+        <errors>
+          <error-none code="NO_DOMAIN_EXCEPTION" />
+        </errors>
+      </contract>
+      <interface>
+        <export-build_error_log_path PURPOSE="Builds timestamped path for error log output file." />
+        <export-setup_error_file_logging PURPOSE="Adds ERROR-level file handler for persistent error logs." />
+        <export-install_global_exception_hooks PURPOSE="Registers sys/thread unhandled exception hooks." />
+        <export-install_asyncio_exception_handler PURPOSE="Registers asyncio loop-level unhandled exception hook." />
+      </interface>
+      <depends>M-APP-LOGGING</depends>
+    </M-ERROR-LOGGING>
 
     <M-PARSING-CHANNELS NAME="ChannelHandleParsing" TYPE="CORE_LOGIC" LAYER="1" ORDER="1">
       <contract>
@@ -448,7 +489,7 @@
       <interface>
         <export-main PURPOSE="Async bootstrap function for entire application." />
       </interface>
-      <depends>M-CONFIG, M-BOT-ROUTER, M-SUMMARIZER-LLM, M-TELETHON-CLIENT, M-STORAGE-POOL</depends>
+      <depends>M-APP-LOGGING, M-ERROR-LOGGING, M-CONFIG, M-BOT-ROUTER, M-SUMMARIZER-LLM, M-TELETHON-CLIENT, M-STORAGE-POOL</depends>
     </M-ENTRY-APP>
   </Modules>
 
@@ -476,7 +517,8 @@
       <step-3 module="M-DOMAIN-TYPES">Define canonical domain aliases.</step-3>
       <step-4 module="M-DOMAIN-DTO">Define immutable DTO models for parsing/ETL/digest.</step-4>
       <step-5 module="M-TRANSFORM-TEXT">Implement common text normalization helpers.</step-5>
-      <step-6 module="M-PARSING-CHANNELS">Implement robust channel token parsing and normalization.</step-6>
+      <step-6 module="M-APP-LOGGING">Implement baseline runtime logging configuration.</step-6>
+      <step-7 module="M-PARSING-CHANNELS">Implement robust channel token parsing and normalization.</step-7>
     </Phase-1>
 
     <Phase-2 name="Integrations" status="done">
@@ -500,7 +542,8 @@
     <Phase-4 name="Bot Runtime" status="done">
       <step-1 module="M-BOT-HANDLERS">Implement command handlers for channel management and analytics.</step-1>
       <step-2 module="M-BOT-ROUTER">Bind handlers and command filters into aiogram Router.</step-2>
-      <step-3 module="M-ENTRY-APP">Compose dependencies and start polling loop.</step-3>
+      <step-3 module="M-ERROR-LOGGING">Add timestamped persistent error logging and global exception hooks.</step-3>
+      <step-4 module="M-ENTRY-APP">Compose dependencies and start polling loop.</step-4>
     </Phase-4>
   </ImplementationOrder>
 </DevelopmentPlan>

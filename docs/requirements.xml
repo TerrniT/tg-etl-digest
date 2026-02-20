@@ -1,4 +1,4 @@
-<RequirementsAnalysis VERSION="1.0.0">
+<RequirementsAnalysis VERSION="1.1.0">
   <UseCases>
     <UC-001>
       <Actor>TelegramUser</Actor>
@@ -56,6 +56,17 @@
         <ac-3>Parser reports invalid tokens separately from valid handles.</ac-3>
       </AcceptanceCriteria>
     </UC-005>
+
+    <UC-006>
+      <Actor>System</Actor>
+      <Action>Captures and persists runtime errors</Action>
+      <Goal>Provide timestamped error logs for post-incident diagnostics</Goal>
+      <AcceptanceCriteria>
+        <ac-1>On startup, application creates log destination under `logs/timestamps` when missing.</ac-1>
+        <ac-2>Unhandled sync/thread/asyncio exceptions are written to timestamped log file.</ac-2>
+        <ac-3>Handled domain errors in command handlers are written to error log with context.</ac-3>
+      </AcceptanceCriteria>
+    </UC-006>
   </UseCases>
 
   <BusinessRules>
